@@ -10,7 +10,7 @@ on:
       targets:
         description: 'Space separated nix attrs (default: macos arm64 + amd64 + universal, audio-default)'
         required: false
-        default: 'mk-out-archive-libs-macos-arm64-audio-default mk-out-archive-libs-macos-amd64-audio-default'
+        default: 'mk-out-archive-libs-macos-arm64-audio-default mk-out-archive-libs-macos-amd64-audio-default mk-out-archive-xcframeworks-macos-universal-audio-default'
         type: string
 
 jobs:
@@ -105,7 +105,7 @@ jobs:
           cat evidence/dylibs.txt || true
 
           # ffmpeg configure 的 Enabled filters 段落是最权威的证据
-          for attr in $(echo "${TARGETS:-mk-pkg-ffmpeg-macos-arm64-audio-default}" | sed 's/mk-out-archive-libs/mk-pkg-ffmpeg/; s/mk-out-archive-xcframeworks/mk-pkg-ffmpeg/'); do
+          for attr in mk-pkg-ffmpeg-macos-arm64-audio-default mk-pkg-ffmpeg-macos-amd64-audio-default; do
             echo "===== nix log .#$attr =====" >> evidence/ffmpeg-configure.txt
             nix log ".#$attr" 2>&1 | grep -A 60 'Enabled filters' >> evidence/ffmpeg-configure.txt || true
           done
