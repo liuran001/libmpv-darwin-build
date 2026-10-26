@@ -1,14 +1,8 @@
 name: ci
 
 on:
-  push:
-    branches:
-      - main
-    tags:
-      - "*"
-  pull_request:
-    branches:
-      - "*"
+  # fork 用途：只在手动触发时跑，避免一次 push 就启动全矩阵（42 个归档）。
+  workflow_dispatch:
 
 jobs:
   ci:

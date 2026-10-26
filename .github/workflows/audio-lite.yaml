@@ -1,0 +1,145 @@
+name: audio-lite
+
+# 构建带音频滤镜的 audio-default libmpv（macOS arm64 + amd64），
+# 并记录 SHA-256 / 体积 / ffmpeg configure 里的 Enabled filters 作为证据。
+# 不使用任何 secrets。
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Space separated nix attrs (default: macos arm64 + amd64 + universal, audio-default)'
+        required: false
+        default: 'mk-out-archive-libs-macos-arm64-audio-default mk-out-archive-libs-macos-amd64-audio-default'
+        type: string
+
+jobs:
+  build:
+    name: Build audio-default libmpv (macOS)
+    # https://github.com/actions/runner-images/blob/main/images/macos/macos-15-arm64-Readme.md
+    runs-on: macos-15
+    timeout-minutes: 340
+    env:
+      TARGETS: ${{ github.event.inputs.targets }}
+    steps:
+      - name: Platform info
+        run: |
+          printf "%-23s %s\n" "ProductVersion:" "$(/usr/bin/sw_vers -productVersion)"
+          printf "%-23s %s\n" "Arch:" "$(uname -m)"
+          sysctl -n hw.ncpu
+
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+        with:
+          extra-conf: |
+            sandbox = true
+            sandbox-fallback = false
+
+      - name: Nix version
+        run: nix --version
+
+      - uses: DeterminateSystems/magic-nix-cache-action@v13
+        continue-on-error: true
+        with:
+          use-flakehub: false
+
+      - name: Xcode path
+        id: xcode_path
+        run: |
+          if [ -d /Applications/Xcode_16.1.0.app ]; then
+            XCODE_PATH=$(realpath /Applications/Xcode_16.1.0.app)
+          else
+            XCODE_PATH=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort | tail -1)
+            XCODE_PATH=$(realpath "$XCODE_PATH")
+          fi
+          echo "xcode_path=$XCODE_PATH" >> "$GITHUB_OUTPUT"
+          "$XCODE_PATH/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: Build
+        env:
+          XCODE_PATH: ${{ steps.xcode_path.outputs.xcode_path }}
+        run: |
+          set -eux
+          echo "$XCODE_PATH" > .nix/config/xcode.path
+          for t in ${TARGETS:-mk-out-archive-libs-macos-arm64-audio-default}; do
+            nix build -v -L \
+              --option sandbox true \
+              --option sandbox-fallback false \
+              --option extra-sandbox-paths "$XCODE_PATH" \
+              --out-link "result-$t" \
+              ".#$t"
+          done
+          git checkout -- .nix/config/xcode.path || true
+
+      - name: Collect artifacts and provenance
+        if: always()
+        run: |
+          mkdir -p out
+          for d in result-*; do
+            [ -e "$d" ] || continue
+            cp -v "$d"/*.tar.gz out/ 2>/dev/null || true
+          done
+          ls -l out
+          ( cd out && sha256sum *.tar.gz > SHA256SUMS.txt && ls -l *.tar.gz >> SHA256SUMS.txt && cat SHA256SUMS.txt )
+
+      - name: Verify dylibs and filter evidence
+        if: always()
+        run: |
+          mkdir -p evidence
+          for d in result-*; do
+            [ -e "$d" ] || continue
+            echo "===== $d =====" >> evidence/dylibs.txt
+            ls -l "$d" >> evidence/dylibs.txt || true
+            for f in "$d"/libmpv*.dylib; do
+              [ -f "$f" ] || continue
+              echo "-- $(basename "$f"): $(lipo -archs "$f" 2>/dev/null || true)" >> evidence/dylibs.txt
+              otool -L "$f" | head -20 >> evidence/dylibs.txt || true
+            done
+            for f in "$d"/libavfilter*.dylib; do
+              [ -f "$f" ] || continue
+              echo "-- avfilter strings in $(basename "$f") --" >> evidence/dylibs.txt
+              strings "$f" | grep -E '^(volume|alimiter|afade|aresample|dynaudnorm|loudnorm|acrossfade|acompressor|agate|atempo|bass|treble|highpass|lowpass|superequalizer|pan|channelmap|ebur128|astats|silencedetect|silenceremove|amix|amerge|asplit|concat|join|aformat|asetnsamples|apad|atrim)$' | sort -u >> evidence/dylibs.txt || true
+            done
+          done
+          cat evidence/dylibs.txt || true
+
+          # ffmpeg configure 的 Enabled filters 段落是最权威的证据
+          for attr in $(echo "${TARGETS:-mk-pkg-ffmpeg-macos-arm64-audio-default}" | sed 's/mk-out-archive-libs/mk-pkg-ffmpeg/; s/mk-out-archive-xcframeworks/mk-pkg-ffmpeg/'); do
+            echo "===== nix log .#$attr =====" >> evidence/ffmpeg-configure.txt
+            nix log ".#$attr" 2>&1 | grep -A 60 'Enabled filters' >> evidence/ffmpeg-configure.txt || true
+          done
+          cat evidence/ffmpeg-configure.txt || true
+
+      - name: Provenance
+        if: always()
+        run: |
+          {
+            echo "platform: apple (macOS audio-default)"
+            echo "build repo: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY @ $GITHUB_SHA"
+            echo "workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "runner: macos-15 (arm64)"
+            echo "ffmpeg version: $(grep -A3 'name = \"ffmpeg\"' packages.lock.nix | grep version | head -1)"
+            echo "mpv version: $(grep -A3 'name = \"mpv\"' packages.lock.nix | grep version | head -1)"
+            echo "license mode: LGPL (no --enable-gpl/--enable-nonfree; mpv -Dgpl=false)"
+            echo
+            echo "--- patches applied to mpv (audio variant) ---"
+            grep -E 'patches/mpv' nix/packages/mk-pkg-mpv/default.nix
+            echo
+            echo "--- ffmpeg audio filters added (nix/packages/mk-pkg-ffmpeg/meson.build) ---"
+            sed -n '/audio_processing_filters = \[/,/^\]/p' nix/packages/mk-pkg-ffmpeg/meson.build
+          } > out/PROVENANCE.txt
+          cat out/PROVENANCE.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: libmpv-audio-lite-macos
+          path: |
+            out/*.tar.gz
+            out/SHA256SUMS.txt
+            out/PROVENANCE.txt
+            evidence/*.txt
+          if-no-files-found: warn
+          retention-days: 30
