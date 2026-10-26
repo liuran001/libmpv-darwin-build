@@ -185,8 +185,8 @@ jobs:
             echo "build repo: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY @ $GITHUB_SHA"
             echo "workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "runner: macos-15 (arm64)"
-            echo "ffmpeg version: $(grep -A6 'ffmpeg' packages.lock.nix | grep -m1 version || true)"
-            echo "mpv version: $(grep -A6 '\bmpv\b' packages.lock.nix | grep -m1 version || true)"
+            echo "ffmpeg version: $(grep -A2 '^  ffmpeg = {' packages.lock.nix | grep -m1 'version' || true)"
+            echo "mpv version: $(grep -A2 '^  mpv = {' packages.lock.nix | grep -m1 'version' || true)"
             echo "license mode: LGPL (no --enable-gpl/--enable-nonfree; mpv -Dgpl=false)"
             echo
             echo "--- packages.lock.nix (ffmpeg / mpv pins) ---"
