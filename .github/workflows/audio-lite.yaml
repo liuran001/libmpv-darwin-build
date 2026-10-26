@@ -145,7 +145,9 @@ jobs:
             LIBDIR="$PWD/x/$arch"
             [ -d "$LIBDIR" ] || continue
             echo "===== macOS $arch =====" >> evidence/filter-probe.txt
-            if clang -O1 probe/probe.c -L"$LIBDIR" -lavfilter -lavcodec -lavformat -lavutil \
+            CLANG_ARCH=""
+            [ "$arch" = "amd64" ] && CLANG_ARCH="-arch x86_64"
+            if clang $CLANG_ARCH -O1 probe/probe.c -L"$LIBDIR" -lavfilter -lavcodec -lavformat -lavutil \
                  -lswresample -lswscale -lmbedcrypto -lmbedtls -lmbedx509 \
                  -Wl,-rpath,"$LIBDIR" -o "probe/probe-$arch" 2>>evidence/filter-probe.txt; then
               if [ "$arch" = "arm64" ]; then
@@ -185,8 +187,8 @@ jobs:
             echo "build repo: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY @ $GITHUB_SHA"
             echo "workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
             echo "runner: macos-15 (arm64)"
-            echo "ffmpeg version: $(grep -A2 '^  ffmpeg = {' packages.lock.nix | grep -m1 'version' || true)"
-            echo "mpv version: $(grep -A2 '^  mpv = {' packages.lock.nix | grep -m1 'version' || true)"
+            echo "ffmpeg version: $(grep -A2 '^  ffmpeg = {' packages.lock.nix | sed -n 's/.*version = "\(.*\)";/\1/p')"
+            echo "mpv version: $(grep -A2 '^  mpv = {' packages.lock.nix | sed -n 's/.*version = "\(.*\)";/\1/p')"
             echo "license mode: LGPL (no --enable-gpl/--enable-nonfree; mpv -Dgpl=false)"
             echo
             echo "--- packages.lock.nix (ffmpeg / mpv pins) ---"
