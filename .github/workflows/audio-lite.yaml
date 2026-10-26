@@ -12,6 +12,11 @@ on:
         required: false
         default: 'mk-out-archive-libs-macos-arm64-audio-default mk-out-archive-libs-macos-amd64-audio-default mk-out-archive-xcframeworks-macos-universal-audio-default'
         type: string
+      version:
+        description: 'Version string baked into artifact names (also written to .nix/config/version.txt)'
+        required: false
+        default: 'audio-lite-2026-10-27'
+        type: string
 
 jobs:
   build:
@@ -21,6 +26,7 @@ jobs:
     timeout-minutes: 340
     env:
       TARGETS: ${{ github.event.inputs.targets }}
+      VERSION: ${{ github.event.inputs.version }}
     steps:
       - name: Platform info
         run: |
@@ -62,6 +68,7 @@ jobs:
         run: |
           set -eux
           echo "$XCODE_PATH" > .nix/config/xcode.path
+          echo "${VERSION:-develop}" > .nix/config/version.txt
           for t in ${TARGETS:-mk-out-archive-libs-macos-arm64-audio-default}; do
             nix build -v -L \
               --option sandbox true \
@@ -70,7 +77,7 @@ jobs:
               --out-link "result-$t" \
               ".#$t"
           done
-          git checkout -- .nix/config/xcode.path || true
+          git checkout -- .nix/config/xcode.path .nix/config/version.txt || true
 
       - name: Collect artifacts
         if: always()
@@ -179,6 +186,27 @@ jobs:
           done
           cat evidence/filter-strings.txt
 
+      - name: Produce per-framework zips for SwiftPM binaryTarget
+        if: always()
+        run: |
+          mkdir -p swiftpm
+          if [ -d x/xcframeworks ]; then
+            VER="${VERSION:-develop}"
+            BASE="libmpv-xcframeworks_${VER}_macos-universal-audio-default"
+            cd x/xcframeworks
+            # 与上游 mk-out-archive 一致：zip -Xry <base>_<Framework>.zip <Framework>.xcframework
+            # -y 保留符号链接，SwiftPM 的 binaryTarget 需要这个
+            for xc in *.xcframework; do
+              FW=$(basename "$xc" .xcframework)
+              zip -Xry "$GITHUB_WORKSPACE/swiftpm/${BASE}_${FW}.zip" "$xc"
+            done
+            cd "$GITHUB_WORKSPACE/swiftpm"
+            ls -l *.zip
+            shasum -a 256 *.zip | tee SHA256SUMS-swiftpm.txt
+            echo "--- symlink check (expect l entries) ---"
+            unzip -l "${BASE}_Mpv.zip" | head -20
+          fi
+
       - name: Provenance
         if: always()
         run: |
@@ -210,6 +238,8 @@ jobs:
           path: |
             out/*.tar.gz
             out/SHA256SUMS.txt
+            swiftpm/*.zip
+            swiftpm/SHA256SUMS-swiftpm.txt
             out/PROVENANCE.txt
             evidence/*.txt
           if-no-files-found: warn
