@@ -168,6 +168,43 @@ audio_default_options = [
     '--enable-filter=equalizer',
 ]
 
+# MusicDownloader W4：均衡器 / 交叉淡化 / 音量均衡需要的音频滤镜。
+# 与 windows 与 android 构建保持同一份清单。
+audio_processing_filters = [
+    '--enable-filter=volume',
+    '--enable-filter=dynaudnorm',
+    '--enable-filter=loudnorm',
+    '--enable-filter=speechnorm',
+    '--enable-filter=afade',
+    '--enable-filter=acrossfade',
+    '--enable-filter=alimiter',
+    '--enable-filter=acompressor',
+    '--enable-filter=agate',
+    '--enable-filter=aresample',
+    '--enable-filter=aformat',
+    '--enable-filter=asetnsamples',
+    '--enable-filter=anull',
+    '--enable-filter=apad',
+    '--enable-filter=atrim',
+    '--enable-filter=atempo',
+    '--enable-filter=bass',
+    '--enable-filter=treble',
+    '--enable-filter=highpass',
+    '--enable-filter=lowpass',
+    '--enable-filter=superequalizer',
+    '--enable-filter=pan',
+    '--enable-filter=channelmap',
+    '--enable-filter=ebur128',
+    '--enable-filter=astats',
+    '--enable-filter=silencedetect',
+    '--enable-filter=silenceremove',
+    '--enable-filter=amix',
+    '--enable-filter=amerge',
+    '--enable-filter=asplit',
+    '--enable-filter=concat',
+    '--enable-filter=join',
+]
+
 # https://github.com/media-kit/libmpv-android-video-build/blob/7353af784df9bab3256acd8d90f208024d16ab96/buildscripts/flavors/default.sh
 video_default_options = [
     # decoders
@@ -311,16 +348,19 @@ endif
 # components
 if flavor == 'default'
     options += audio_default_options
+    options += audio_processing_filters
     if variant == 'video'
         options += video_default_options
     endif
 elif flavor == 'full'
     options += audio_full_options
+    options += audio_processing_filters
     if variant == 'video'
         options += video_full_options
     endif
 elif flavor == 'encodersgpl'
     options += audio_full_options
+    options += audio_processing_filters
     options += audio_encodersgpl_options
     if variant == 'video'
         options += video_full_options
