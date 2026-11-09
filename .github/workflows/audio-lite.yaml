@@ -173,7 +173,7 @@ jobs:
         if: always()
         run: |
           : > evidence/filter-strings.txt
-          for f in x/arm64/libavfilter.dylib x/amd64/libavfilter.dylib; do
+          for f in x/arm64/libavfilter.dylib x/amd64/libavfilter.dylib x/xcframeworks/Avfilter.xcframework/*/Avfilter.framework/Avfilter; do
             [ -f "$f" ] || continue
             echo "===== $f =====" >> evidence/filter-strings.txt
             for n in volume alimiter afade aresample dynaudnorm loudnorm speechnorm acrossfade \
@@ -192,7 +192,9 @@ jobs:
           mkdir -p swiftpm
           if [ -d x/xcframeworks ]; then
             VER="${VERSION:-develop}"
-            BASE="libmpv-xcframeworks_${VER}_macos-universal-audio-default"
+            # 由 xcframeworks 归档名推出前缀，macOS 与 iOS 共用（如 ..._ios-universal-audio-default）
+            XT=$(ls "$GITHUB_WORKSPACE"/out/libmpv-xcframeworks_*.tar.gz | head -1)
+            BASE=$(basename "$XT" .tar.gz)
             cd x/xcframeworks
             # 与上游 mk-out-archive 一致：zip -Xry <base>_<Framework>.zip <Framework>.xcframework
             # -y 保留符号链接，SwiftPM 的 binaryTarget 需要这个
