@@ -137,6 +137,7 @@ audio_default_options = [
     '--enable-demuxer=wv',
     '--enable-demuxer=xwma',
     '--enable-demuxer=dsf',
+    '--enable-demuxer=iff',
     '--enable-demuxer=dts',
     '--enable-demuxer=truehd',
 
